@@ -152,7 +152,7 @@ class Adafruit_ST7735 : public Adafruit_GFX {
 
   boolean  hwSPI;
 
-#if defined(__AVR__) || defined(CORE_TEENSY)
+#if defined(__AVR__)
 volatile uint8_t *dataport, *clkport, *csport, *rsport;
   uint8_t  _cs, _rs, _rst, _sid, _sclk,
            datapinmask, clkpinmask, cspinmask, rspinmask,
@@ -166,6 +166,14 @@ volatile uint8_t *dataport, *clkport, *csport, *rsport;
             colstart, rowstart; // some displays need this changed
 #endif //  #if defined(__SAM3X8E__)
   
+#if defined(__MK20DX128__) || defined(__MK20DX256__)
+  uint8_t  _cs, _rs, _rst, _sid, _sclk;
+  uint8_t colstart, rowstart;
+  uint8_t pcs_data, pcs_command;
+  uint32_t ctar;
+  volatile uint8_t *datapin, *clkpin, *cspin, *rspin;
+#endif
+
 };
 
 #endif

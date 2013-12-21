@@ -51,9 +51,6 @@ Adafruit_ST7735::Adafruit_ST7735(uint8_t cs, uint8_t rs, uint8_t rst) :
   _sid  = _sclk = 0;
 }
 
-#if defined(CORE_TEENSY) && !defined(__AVR__)
-#define __AVR__
-#endif
 
 #ifdef __AVR__
 inline void Adafruit_ST7735::writebegin()
@@ -154,6 +151,90 @@ void Adafruit_ST7735::writedata16(uint16_t d)
   spiwrite(d);
   csport->PIO_SODR  |=  cspinmask;
 } 
+#elif defined(__MK20DX128__) || defined(__MK20DX256__)
+
+//#define SPI_BITRATE 0   // 24 MHz
+#define SPI_BITRATE 1   // 12 MHz
+//#define SPI_BITRATE 2   // 8 MHz
+//#define SPI_BITRATE 3   // 6 MHz
+//#define SPI_BITRATE 4   // 3 MHz
+inline void Adafruit_ST7735::writebegin()
+{
+}
+
+inline void Adafruit_ST7735::spiwrite(uint8_t c)
+{
+	for (uint8_t bit = 0x80; bit; bit >>= 1) {
+		*datapin = ((c & bit) ? 1 : 0);
+		*clkpin = 1;
+		*clkpin = 0;
+	}
+}
+
+void Adafruit_ST7735::writecommand(uint8_t c)
+{
+	if (hwSPI) {
+		SPI0.PUSHR = c | (pcs_command << 16) | SPI_PUSHR_CTAS(0);
+		while (((SPI0.SR) & (15 << 12)) > (3 << 12)) ; // wait if FIFO full
+	} else {
+		*rspin = 0;
+		*cspin = 0;
+		spiwrite(c);
+		*cspin = 1;
+	}
+}
+
+void Adafruit_ST7735::writedata(uint8_t c)
+{
+	if (hwSPI) {
+		SPI0.PUSHR = c | (pcs_data << 16) | SPI_PUSHR_CTAS(0);
+		while (((SPI0.SR) & (15 << 12)) > (3 << 12)) ; // wait if FIFO full
+	} else {
+		*rspin = 1;
+		*cspin = 0;
+		spiwrite(c);
+		*cspin = 1;
+	}
+}
+
+void Adafruit_ST7735::writedata16(uint16_t d)
+{
+	if (hwSPI) {
+		SPI0.PUSHR = d | (pcs_data << 16) | SPI_PUSHR_CTAS(1);
+		while (((SPI0.SR) & (15 << 12)) > (3 << 12)) ; // wait if FIFO full
+	} else {
+		*rspin = 1;
+		*cspin = 0;
+		spiwrite(d >> 8);
+		spiwrite(d);
+		*cspin = 1;
+	}
+}
+
+static bool spi_pin_is_cs(uint8_t pin)
+{
+	if (pin == 2 || pin == 6 || pin == 9) return true;
+	if (pin == 10 || pin == 15) return true;
+	if (pin >= 20 && pin <= 23) return true;
+	return false;
+}
+
+static uint8_t spi_configure_cs_pin(uint8_t pin)
+{
+        switch (pin) {
+                case 10: CORE_PIN10_CONFIG = PORT_PCR_MUX(2); return 0x01; // PTC4
+                case 2:  CORE_PIN2_CONFIG  = PORT_PCR_MUX(2); return 0x01; // PTD0
+                case 9:  CORE_PIN9_CONFIG  = PORT_PCR_MUX(2); return 0x02; // PTC3
+                case 6:  CORE_PIN6_CONFIG  = PORT_PCR_MUX(2); return 0x02; // PTD4
+                case 20: CORE_PIN20_CONFIG = PORT_PCR_MUX(2); return 0x04; // PTD5
+                case 23: CORE_PIN23_CONFIG = PORT_PCR_MUX(2); return 0x04; // PTC2
+                case 21: CORE_PIN21_CONFIG = PORT_PCR_MUX(2); return 0x08; // PTD6
+                case 22: CORE_PIN22_CONFIG = PORT_PCR_MUX(2); return 0x08; // PTC1
+                case 15: CORE_PIN15_CONFIG = PORT_PCR_MUX(2); return 0x10; // PTC0
+        }
+        return 0;
+}
+
 #endif //#if defined(__SAM3X8E__)
 
 
@@ -323,11 +404,9 @@ void Adafruit_ST7735::commandList(const uint8_t *addr) {
 
 
 // Initialization code common to both 'B' and 'R' type displays
-void Adafruit_ST7735::commonInit(const uint8_t *cmdList) {
+void Adafruit_ST7735::commonInit(const uint8_t *cmdList)
+{
   colstart  = rowstart = 0; // May be overridden in init func
-
-
-
 
 #ifdef __AVR__
   pinMode(_rs, OUTPUT);
@@ -383,6 +462,52 @@ void Adafruit_ST7735::commonInit(const uint8_t *cmdList) {
   }
   // toggle RST low to reset; CS low so it'll listen to us
   csport ->PIO_CODR  |=  cspinmask; // Set control bits to LOW (idle)
+
+
+#elif defined(__MK20DX128__) || defined(__MK20DX256__)
+	if (_sid == 0) _sid = 11;
+	if (_sclk == 0) _sclk = 13;
+	if (spi_pin_is_cs(_cs) && spi_pin_is_cs(_rs) &&
+	   (_sid == 7 || _sid == 11) && (_sclk == 13 || _sclk == 14)) {
+		hwSPI = true;
+		if (_sclk == 13) {
+			CORE_PIN13_CONFIG = PORT_PCR_MUX(2) | PORT_PCR_DSE;
+			SPCR.setSCK(13);
+		} else {
+			CORE_PIN14_CONFIG = PORT_PCR_MUX(2);
+			SPCR.setSCK(14);
+		}
+		if (_sid == 11) {
+			CORE_PIN11_CONFIG = PORT_PCR_MUX(2);
+			SPCR.setMOSI(11);
+		} else {
+			CORE_PIN7_CONFIG = PORT_PCR_MUX(2);
+			SPCR.setMOSI(7);
+		}
+		ctar = SPI_CTAR_PBR(0) | SPI_CTAR_BR(SPI_BITRATE) |
+			SPI_CTAR_CSSCK(SPI_BITRATE) | SPI_CTAR_DBR;
+		pcs_data = spi_configure_cs_pin(_cs);
+		pcs_command = pcs_data | spi_configure_cs_pin(_rs);
+		SIM_SCGC6 |= SIM_SCGC6_SPI0;
+		SPI0.MCR = SPI_MCR_MDIS | SPI_MCR_HALT;
+		SPI0.CTAR0 = ctar | SPI_CTAR_FMSZ(7);
+		SPI0.CTAR1 = ctar | SPI_CTAR_FMSZ(15);
+		SPI0.MCR = SPI_MCR_MSTR | SPI_MCR_PCSIS(0x1F) | SPI_MCR_CLR_TXF | SPI_MCR_CLR_RXF;
+	} else {
+		hwSPI = false;
+		cspin = portOutputRegister(digitalPinToPort(_cs));
+		rspin = portOutputRegister(digitalPinToPort(_rs));
+		clkpin = portOutputRegister(digitalPinToPort(_sclk));
+		datapin = portOutputRegister(digitalPinToPort(_sid));
+		*cspin = 1;
+		*rspin = 0;
+		*clkpin = 0;
+		*datapin = 0;
+		pinMode(_cs, OUTPUT);
+		pinMode(_rs, OUTPUT);
+		pinMode(_sclk, OUTPUT);
+		pinMode(_sid, OUTPUT);
+	}
 
 #endif
 
