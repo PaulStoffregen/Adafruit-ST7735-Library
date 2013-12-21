@@ -124,7 +124,11 @@ class Adafruit_ST7735 : public Adafruit_GFX {
              uint16_t color),
            setRotation(uint8_t r),
            invertDisplay(boolean i);
-  uint16_t Color565(uint8_t r, uint8_t g, uint8_t b);
+
+  // Pass 8-bit (each) R,G,B, get back 16-bit packed color
+  inline uint16_t Color565(uint8_t r, uint8_t g, uint8_t b) {
+           return ((b & 0xF8) << 8) | ((g & 0xFC) << 3) | (r >> 3);
+  }
 
   /* These are not for current use, 8-bit protocol only!
   uint8_t  readdata(void),
@@ -137,9 +141,11 @@ class Adafruit_ST7735 : public Adafruit_GFX {
  private:
   uint8_t  tabcolor;
 
-  void     spiwrite(uint8_t),
+  void     writebegin(),
+           spiwrite(uint8_t),
            writecommand(uint8_t c),
            writedata(uint8_t d),
+           writedata16(uint16_t d),
            commandList(const uint8_t *addr),
            commonInit(const uint8_t *cmdList);
 //uint8_t  spiread(void);

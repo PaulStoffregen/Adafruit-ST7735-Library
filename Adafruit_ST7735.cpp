@@ -56,10 +56,13 @@ Adafruit_ST7735::Adafruit_ST7735(uint8_t cs, uint8_t rs, uint8_t rst) :
 #endif
 
 #ifdef __AVR__
-inline void Adafruit_ST7735::spiwrite(uint8_t c) {
+inline void Adafruit_ST7735::writebegin()
+{
+}
 
+inline void Adafruit_ST7735::spiwrite(uint8_t c)
+{
   //Serial.println(c, HEX);
-
   if (hwSPI) {
     SPDR = c;
     while(!(SPSR & _BV(SPIF)));
@@ -74,34 +77,43 @@ inline void Adafruit_ST7735::spiwrite(uint8_t c) {
   }
 }
 
-
-void Adafruit_ST7735::writecommand(uint8_t c) {
+void Adafruit_ST7735::writecommand(uint8_t c)
+{
   *rsport &= ~rspinmask;
   *csport &= ~cspinmask;
-
   //Serial.print("C ");
   spiwrite(c);
-
   *csport |= cspinmask;
 }
 
-
-void Adafruit_ST7735::writedata(uint8_t c) {
+void Adafruit_ST7735::writedata(uint8_t c)
+{
   *rsport |=  rspinmask;
   *csport &= ~cspinmask;
-    
   //Serial.print("D ");
   spiwrite(c);
-
   *csport |= cspinmask;
 } 
-#endif //#ifdef __AVR__
 
-#if defined(__SAM3X8E__)
-inline void Adafruit_ST7735::spiwrite(uint8_t c) {
-  
+void Adafruit_ST7735::writedata16(uint16_t d)
+{
+  *rsport |=  rspinmask;
+  *csport &= ~cspinmask;
+  //Serial.print("D ");
+  spiwrite(d >> 8);
+  spiwrite(d);
+  *csport |= cspinmask;
+} 
+
+
+#elif defined(__SAM3X8E__)
+inline void Adafruit_ST7735::writebegin()
+{
+}
+
+inline void Adafruit_ST7735::spiwrite(uint8_t c)
+{
   //Serial.println(c, HEX);
-  
   if (hwSPI) {
     SPI.transfer(c);
   } else {
@@ -115,25 +127,31 @@ inline void Adafruit_ST7735::spiwrite(uint8_t c) {
   }
 }
 
-
-void Adafruit_ST7735::writecommand(uint8_t c) {
+void Adafruit_ST7735::writecommand(uint8_t c)
+{
   rsport->PIO_CODR |=  rspinmask;
   csport->PIO_CODR  |=  cspinmask;
-  
   //Serial.print("C ");
   spiwrite(c);
-  
   csport->PIO_SODR  |=  cspinmask;
 }
 
-
-void Adafruit_ST7735::writedata(uint8_t c) {
+void Adafruit_ST7735::writedata(uint8_t c)
+{
   rsport->PIO_SODR |=  rspinmask;
   csport->PIO_CODR  |=  cspinmask;
-  
   //Serial.print("D ");
   spiwrite(c);
-  
+  csport->PIO_SODR  |=  cspinmask;
+} 
+
+void Adafruit_ST7735::writedata16(uint16_t d)
+{
+  rsport->PIO_SODR |=  rspinmask;
+  csport->PIO_CODR  |=  cspinmask;
+  //Serial.print("D ");
+  spiwrite(d >> 8);
+  spiwrite(d);
   csport->PIO_SODR  |=  cspinmask;
 } 
 #endif //#if defined(__SAM3X8E__)
@@ -284,6 +302,7 @@ void Adafruit_ST7735::commandList(const uint8_t *addr) {
   uint8_t  numCommands, numArgs;
   uint16_t ms;
 
+  writebegin();
   numCommands = pgm_read_byte(addr++);   // Number of commands to follow
   while(numCommands--) {                 // For each command...
     writecommand(pgm_read_byte(addr++)); //   Read, issue command
@@ -307,61 +326,66 @@ void Adafruit_ST7735::commandList(const uint8_t *addr) {
 void Adafruit_ST7735::commonInit(const uint8_t *cmdList) {
   colstart  = rowstart = 0; // May be overridden in init func
 
+
+
+
+#ifdef __AVR__
   pinMode(_rs, OUTPUT);
   pinMode(_cs, OUTPUT);
-#ifdef __AVR__
   csport    = portOutputRegister(digitalPinToPort(_cs));
   rsport    = portOutputRegister(digitalPinToPort(_rs));
-#endif
-#if defined(__SAM3X8E__)
-  csport    = digitalPinToPort(_cs);
-  rsport    = digitalPinToPort(_rs);
-#endif
   cspinmask = digitalPinToBitMask(_cs);
   rspinmask = digitalPinToBitMask(_rs);
 
   if(hwSPI) { // Using hardware SPI
     SPI.begin();
-#ifdef __AVR__
     SPI.setClockDivider(SPI_CLOCK_DIV4); // 4 MHz (half speed)
     //Due defaults to 4mHz (clock divider setting of 21)
-#endif
-#if defined(__SAM3X8E__)
-    SPI.setClockDivider(21); // 4 MHz
-    //Due defaults to 4mHz (clock divider setting of 21), but we'll set it anyway 
-#endif
     SPI.setBitOrder(MSBFIRST);
     SPI.setDataMode(SPI_MODE0);
   } else {
     pinMode(_sclk, OUTPUT);
     pinMode(_sid , OUTPUT);
-#ifdef __AVR__
     clkport     = portOutputRegister(digitalPinToPort(_sclk));
     dataport    = portOutputRegister(digitalPinToPort(_sid));
-#endif
-#if defined(__SAM3X8E__)
-    clkport     = digitalPinToPort(_sclk);
-    dataport    = digitalPinToPort(_sid);
-#endif
     clkpinmask  = digitalPinToBitMask(_sclk);
     datapinmask = digitalPinToBitMask(_sid);
-#ifdef __AVR__
     *clkport   &= ~clkpinmask;
     *dataport  &= ~datapinmask;
-#endif
-#if defined(__SAM3X8E__)
+  }
+  // toggle RST low to reset; CS low so it'll listen to us
+  *csport &= ~cspinmask;
+
+
+#elif defined(__SAM3X8E__)
+  pinMode(_rs, OUTPUT);
+  pinMode(_cs, OUTPUT);
+  csport    = digitalPinToPort(_cs);
+  rsport    = digitalPinToPort(_rs);
+  cspinmask = digitalPinToBitMask(_cs);
+  rspinmask = digitalPinToBitMask(_rs);
+
+  if(hwSPI) { // Using hardware SPI
+    SPI.begin();
+    SPI.setClockDivider(21); // 4 MHz
+    //Due defaults to 4mHz (clock divider setting of 21), but we'll set it anyway 
+    SPI.setBitOrder(MSBFIRST);
+    SPI.setDataMode(SPI_MODE0);
+  } else {
+    pinMode(_sclk, OUTPUT);
+    pinMode(_sid , OUTPUT);
+    clkport     = digitalPinToPort(_sclk);
+    dataport    = digitalPinToPort(_sid);
+    clkpinmask  = digitalPinToBitMask(_sclk);
+    datapinmask = digitalPinToBitMask(_sid);
     clkport ->PIO_CODR  |=  clkpinmask; // Set control bits to LOW (idle)
     dataport->PIO_CODR  |=  datapinmask; // Signals are ACTIVE HIGH
-#endif
   }
-
   // toggle RST low to reset; CS low so it'll listen to us
-#ifdef __AVR__
-  *csport &= ~cspinmask;
-#endif
-#if defined(__SAM3X8E__)
   csport ->PIO_CODR  |=  cspinmask; // Set control bits to LOW (idle)
+
 #endif
+
   if (_rst) {
     pinMode(_rst, OUTPUT);
     digitalWrite(_rst, HIGH);
@@ -409,66 +433,26 @@ void Adafruit_ST7735::setAddrWindow(uint8_t x0, uint8_t y0, uint8_t x1,
  uint8_t y1) {
 
   writecommand(ST7735_CASET); // Column addr set
-  writedata(0x00);
-  writedata(x0+colstart);     // XSTART 
-  writedata(0x00);
-  writedata(x1+colstart);     // XEND
-
+  writedata16(x0+colstart);   // XSTART 
+  writedata16(x1+colstart);   // XEND
   writecommand(ST7735_RASET); // Row addr set
-  writedata(0x00);
-  writedata(y0+rowstart);     // YSTART
-  writedata(0x00);
-  writedata(y1+rowstart);     // YEND
-
+  writedata16(y0+rowstart);   // YSTART
+  writedata16(y1+rowstart);   // YEND
   writecommand(ST7735_RAMWR); // write to RAM
 }
 
 
-void Adafruit_ST7735::pushColor(uint16_t color) {
-#ifdef __AVR__
-  *rsport |=  rspinmask;
-  *csport &= ~cspinmask;
-#endif
-#if defined(__SAM3X8E__)
-  rsport->PIO_SODR |=  rspinmask;
-  csport->PIO_CODR  |=  cspinmask;
-#endif
-  
-  spiwrite(color >> 8);
-  spiwrite(color);
-
-#ifdef __AVR__
-  *csport |= cspinmask;
-#endif
-#if defined(__SAM3X8E__)
-  csport->PIO_SODR  |=  cspinmask;
-#endif
+void Adafruit_ST7735::pushColor(uint16_t color)
+{
+  writebegin();
+  writedata16(color);
 }
 
-void Adafruit_ST7735::drawPixel(int16_t x, int16_t y, uint16_t color) {
-
+void Adafruit_ST7735::drawPixel(int16_t x, int16_t y, uint16_t color)
+{
   if((x < 0) ||(x >= _width) || (y < 0) || (y >= _height)) return;
-
   setAddrWindow(x,y,x+1,y+1);
-
-#ifdef __AVR__
-  *rsport |=  rspinmask;
-  *csport &= ~cspinmask;
-#endif
-#if defined(__SAM3X8E__)
-  rsport->PIO_SODR |=  rspinmask;
-  csport->PIO_CODR  |=  cspinmask;
-#endif
-  
-  spiwrite(color >> 8);
-  spiwrite(color);
-
-#ifdef __AVR__
-  *csport |= cspinmask;
-#endif
-#if defined(__SAM3X8E__)
-  csport->PIO_SODR  |=  cspinmask;
-#endif
+  writedata16(color);
 }
 
 
@@ -479,26 +463,9 @@ void Adafruit_ST7735::drawFastVLine(int16_t x, int16_t y, int16_t h,
   if((x >= _width) || (y >= _height)) return;
   if((y+h-1) >= _height) h = _height-y;
   setAddrWindow(x, y, x, y+h-1);
-
-  uint8_t hi = color >> 8, lo = color;
-#ifdef __AVR__
-  *rsport |=  rspinmask;
-  *csport &= ~cspinmask;
-#endif
-#if defined(__SAM3X8E__)
-  rsport->PIO_SODR |=  rspinmask;
-  csport->PIO_CODR  |=  cspinmask;
-#endif
   while (h--) {
-    spiwrite(hi);
-    spiwrite(lo);
+    writedata16(color);
   }
-#ifdef __AVR__
-  *csport |= cspinmask;
-#endif
-#if defined(__SAM3X8E__)
-  csport->PIO_SODR  |=  cspinmask;
-#endif
 }
 
 
@@ -509,26 +476,9 @@ void Adafruit_ST7735::drawFastHLine(int16_t x, int16_t y, int16_t w,
   if((x >= _width) || (y >= _height)) return;
   if((x+w-1) >= _width)  w = _width-x;
   setAddrWindow(x, y, x+w-1, y);
-
-  uint8_t hi = color >> 8, lo = color;
-#ifdef __AVR__
-  *rsport |=  rspinmask;
-  *csport &= ~cspinmask;
-#endif
-#if defined(__SAM3X8E__)
-  rsport->PIO_SODR |=  rspinmask;
-  csport->PIO_CODR  |=  cspinmask;
-#endif
   while (w--) {
-    spiwrite(hi);
-    spiwrite(lo);
+    writedata16(color);
   }
-#ifdef __AVR__
-  *csport |= cspinmask;
-#endif
-#if defined(__SAM3X8E__)
-  csport->PIO_SODR  |=  cspinmask;
-#endif
 }
 
 
@@ -547,38 +497,14 @@ void Adafruit_ST7735::fillRect(int16_t x, int16_t y, int16_t w, int16_t h,
   if((x >= _width) || (y >= _height)) return;
   if((x + w - 1) >= _width)  w = _width  - x;
   if((y + h - 1) >= _height) h = _height - y;
-
   setAddrWindow(x, y, x+w-1, y+h-1);
-
-  uint8_t hi = color >> 8, lo = color;
-#ifdef __AVR__
-  *rsport |=  rspinmask;
-  *csport &= ~cspinmask;
-#endif
-#if defined(__SAM3X8E__)
-  rsport->PIO_SODR |=  rspinmask;
-  csport->PIO_CODR  |=  cspinmask;
-#endif
   for(y=h; y>0; y--) {
     for(x=w; x>0; x--) {
-      spiwrite(hi);
-      spiwrite(lo);
+      writedata16(color);
     }
   }
-
-#ifdef __AVR__
-  *csport |= cspinmask;
-#endif
-#if defined(__SAM3X8E__)
-  csport->PIO_SODR  |=  cspinmask;
-#endif
 }
 
-
-// Pass 8-bit (each) R,G,B, get back 16-bit packed color
-uint16_t Adafruit_ST7735::Color565(uint8_t r, uint8_t g, uint8_t b) {
-  return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
-}
 
 
 #define MADCTL_MY  0x80
