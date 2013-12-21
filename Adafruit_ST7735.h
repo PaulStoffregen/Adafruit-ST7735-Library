@@ -129,6 +129,7 @@ class Adafruit_ST7735 : public Adafruit_GFX {
   inline uint16_t Color565(uint8_t r, uint8_t g, uint8_t b) {
            return ((b & 0xF8) << 8) | ((g & 0xFC) << 3) | (r >> 3);
   }
+  void setBitrate(uint32_t n);
 
   /* These are not for current use, 8-bit protocol only!
   uint8_t  readdata(void),

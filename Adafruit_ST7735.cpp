@@ -101,6 +101,18 @@ void Adafruit_ST7735::writedata16(uint16_t d)
   *csport |= cspinmask;
 } 
 
+void Adafruit_ST7735::setBitrate(uint32_t n)
+{
+  if (n >= 8000000) {
+    SPI.setClockDivider(SPI_CLOCK_DIV2);
+  } else if (n >= 4000000) {
+    SPI.setClockDivider(SPI_CLOCK_DIV4);
+  } else if (n >= 2000000) {
+    SPI.setClockDivider(SPI_CLOCK_DIV8);
+  } else {
+    SPI.setClockDivider(SPI_CLOCK_DIV16);
+  }
+}
 
 /***************************************************************/
 /*     Arduino Due                                             */
@@ -154,17 +166,22 @@ void Adafruit_ST7735::writedata16(uint16_t d)
   csport->PIO_SODR  |=  cspinmask;
 }
 
+void Adafruit_ST7735::setBitrate(uint32_t n)
+{
+  uint32_t divider=1;
+  while (divider < 255) {
+    if (n >= 84000000 / divider) break;
+    divider = divider - 1;
+  }
+  SPI.setClockDivider(divider);
+}
+
 
 /***************************************************************/
 /*     Teensy 3.0 & 3.1                                        */
 /***************************************************************/
 #elif defined(__MK20DX128__) || defined(__MK20DX256__)
 
-//#define SPI_BITRATE 0   // 24 MHz
-#define SPI_BITRATE 1   // 12 MHz
-//#define SPI_BITRATE 2   // 8 MHz
-//#define SPI_BITRATE 3   // 6 MHz
-//#define SPI_BITRATE 4   // 3 MHz
 inline void Adafruit_ST7735::writebegin()
 {
 }
@@ -240,6 +257,35 @@ static uint8_t spi_configure_cs_pin(uint8_t pin)
                 case 15: CORE_PIN15_CONFIG = PORT_PCR_MUX(2); return 0x10; // PTC0
         }
         return 0;
+}
+
+#define CTAR_24MHz   (SPI_CTAR_PBR(0) | SPI_CTAR_BR(0) | SPI_CTAR_CSSCK(0) | SPI_CTAR_DBR)
+#define CTAR_16MHz   (SPI_CTAR_PBR(1) | SPI_CTAR_BR(0) | SPI_CTAR_CSSCK(0) | SPI_CTAR_DBR)
+#define CTAR_12MHz   (SPI_CTAR_PBR(0) | SPI_CTAR_BR(0) | SPI_CTAR_CSSCK(0))
+#define CTAR_8MHz    (SPI_CTAR_PBR(1) | SPI_CTAR_BR(0) | SPI_CTAR_CSSCK(0))
+#define CTAR_6MHz    (SPI_CTAR_PBR(0) | SPI_CTAR_BR(1) | SPI_CTAR_CSSCK(1))
+#define CTAR_4MHz    (SPI_CTAR_PBR(1) | SPI_CTAR_BR(1) | SPI_CTAR_CSSCK(1))
+
+void Adafruit_ST7735::setBitrate(uint32_t n)
+{
+	if (n >= 24000000) {
+		ctar = CTAR_24MHz;
+	} else if (n >= 16000000) {
+		ctar = CTAR_16MHz;
+	} else if (n >= 12000000) {
+		ctar = CTAR_12MHz;
+	} else if (n >= 8000000) {
+		ctar = CTAR_8MHz;
+	} else if (n >= 6000000) {
+		ctar = CTAR_6MHz;
+	} else {
+		ctar = CTAR_4MHz;
+	}
+	SIM_SCGC6 |= SIM_SCGC6_SPI0;
+	SPI0.MCR = SPI_MCR_MDIS | SPI_MCR_HALT;
+	SPI0.CTAR0 = ctar | SPI_CTAR_FMSZ(7);
+	SPI0.CTAR1 = ctar | SPI_CTAR_FMSZ(15);
+	SPI0.MCR = SPI_MCR_MSTR | SPI_MCR_PCSIS(0x1F) | SPI_MCR_CLR_TXF | SPI_MCR_CLR_RXF;
 }
 
 #endif //#if defined(__SAM3X8E__)
@@ -496,8 +542,7 @@ void Adafruit_ST7735::commonInit(const uint8_t *cmdList)
 			CORE_PIN7_CONFIG = PORT_PCR_MUX(2);
 			SPCR.setMOSI(7);
 		}
-		ctar = SPI_CTAR_PBR(0) | SPI_CTAR_BR(SPI_BITRATE) |
-			SPI_CTAR_CSSCK(SPI_BITRATE) | SPI_CTAR_DBR;
+		ctar = CTAR_12MHz;
 		pcs_data = spi_configure_cs_pin(_cs);
 		pcs_command = pcs_data | spi_configure_cs_pin(_rs);
 		SIM_SCGC6 |= SIM_SCGC6_SPI0;
