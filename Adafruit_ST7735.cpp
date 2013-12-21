@@ -22,10 +22,6 @@
 #include "wiring_private.h"
 #include <SPI.h>
 
-inline uint16_t swapcolor(uint16_t x) { 
-  return (x << 11) | (x & 0x07E0) | (x >> 11);
-}
-
 
 // Constructor when using software SPI.  All output pins are configurable.
 Adafruit_ST7735::Adafruit_ST7735(uint8_t cs, uint8_t rs, uint8_t sid,
@@ -52,6 +48,9 @@ Adafruit_ST7735::Adafruit_ST7735(uint8_t cs, uint8_t rs, uint8_t rst) :
 }
 
 
+/***************************************************************/
+/*     Arduino Uno, Leonardo, Mega, Teensy 2.0, etc            */
+/***************************************************************/
 #ifdef __AVR__
 inline void Adafruit_ST7735::writebegin()
 {
@@ -103,6 +102,9 @@ void Adafruit_ST7735::writedata16(uint16_t d)
 } 
 
 
+/***************************************************************/
+/*     Arduino Due                                             */
+/***************************************************************/
 #elif defined(__SAM3X8E__)
 inline void Adafruit_ST7735::writebegin()
 {
@@ -150,7 +152,12 @@ void Adafruit_ST7735::writedata16(uint16_t d)
   spiwrite(d >> 8);
   spiwrite(d);
   csport->PIO_SODR  |=  cspinmask;
-} 
+}
+
+
+/***************************************************************/
+/*     Teensy 3.0 & 3.1                                        */
+/***************************************************************/
 #elif defined(__MK20DX128__) || defined(__MK20DX256__)
 
 //#define SPI_BITRATE 0   // 24 MHz
@@ -467,8 +474,13 @@ void Adafruit_ST7735::commonInit(const uint8_t *cmdList)
 #elif defined(__MK20DX128__) || defined(__MK20DX256__)
 	if (_sid == 0) _sid = 11;
 	if (_sclk == 0) _sclk = 13;
-	if (spi_pin_is_cs(_cs) && spi_pin_is_cs(_rs) &&
-	   (_sid == 7 || _sid == 11) && (_sclk == 13 || _sclk == 14)) {
+	if ( spi_pin_is_cs(_cs) && spi_pin_is_cs(_rs)
+	 && (_sid == 7 || _sid == 11)
+	 && (_sclk == 13 || _sclk == 14)
+	 && !(_cs ==  2 && _rs == 10) && !(_rs ==  2 && _cs == 10)
+	 && !(_cs ==  6 && _rs ==  9) && !(_rs ==  6 && _cs ==  9)
+	 && !(_cs == 20 && _rs == 23) && !(_rs == 20 && _cs == 23)
+	 && !(_cs == 21 && _rs == 22) && !(_rs == 21 && _cs == 22) ) {
 		hwSPI = true;
 		if (_sclk == 13) {
 			CORE_PIN13_CONFIG = PORT_PCR_MUX(2) | PORT_PCR_DSE;
