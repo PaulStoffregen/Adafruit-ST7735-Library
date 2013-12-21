@@ -31,7 +31,7 @@
 #define SD_CS    4  // Chip select line for SD card
 #define TFT_CS  10  // Chip select line for TFT display
 #define TFT_DC   8  // Data/command line for TFT
-#define TFT_RST  -1  // Reset line for TFT (or connect to +5V)
+#define TFT_RST  0  // Reset line for TFT (or connect to +5V)
 
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 
@@ -43,6 +43,7 @@ Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 #define BUTTON_LEFT 5
 
 void setup(void) {
+  pinMode(SD_CS, INPUT_PULLUP);  // keep SD CS high when not using SD card
   Serial.begin(9600);
 
   // Our supplier changed the 1.8" display slightly after Jan 10, 2012

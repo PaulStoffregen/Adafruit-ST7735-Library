@@ -219,7 +219,7 @@ int n = 0;
 
 void setup()
 {
-	pinMode(sdcs, INPUT_PULLUP);
+	pinMode(sdcs, INPUT_PULLUP);  // keep SD CS high when not using SD card
 	disp.initR(INITR_REDTAB);
 	disp.setRotation(0);
 	disp.setTextWrap(true);

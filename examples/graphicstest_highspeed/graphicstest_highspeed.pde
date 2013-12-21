@@ -22,6 +22,7 @@
 #define cs   10
 #define dc   9
 #define rst  8  // you can also connect this to the Arduino reset
+#define sdcs 4  // CS for SD card, can use any pin
 
 //Use these pins for the shield!
 //#define cs   10
@@ -48,6 +49,7 @@ Adafruit_ST7735 tft = Adafruit_ST7735(cs, dc, rst);
 float p = 3.1415926;
 
 void setup(void) {
+  pinMode(sdcs, INPUT_PULLUP);  // keep SD CS high when not using SD card
   Serial.begin(9600);
   Serial.print("hello!");
 
