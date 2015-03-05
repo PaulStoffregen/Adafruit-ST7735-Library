@@ -289,7 +289,9 @@ void Adafruit_ST7735::setBitrate(uint32_t n)
 	SPI0.MCR = SPI_MCR_MSTR | SPI_MCR_PCSIS(0x1F) | SPI_MCR_CLR_TXF | SPI_MCR_CLR_RXF;
 }
 
-// TeencyLC sort of cross between AVR and Teency 3
+/***************************************************************/
+/*     Teensy LC                                               */
+/***************************************************************/
 #elif defined(__MKL26Z64__)
 inline void Adafruit_ST7735::writebegin()
 {
@@ -301,38 +303,42 @@ inline void Adafruit_ST7735::spiwrite(uint8_t c)
   if (hwSPI) {
     SPI.transfer(c);
   } else {
-	for (uint8_t bit = 0x80; bit; bit >>= 1) {
-	  *datapin = ((c & bit) ? 1 : 0);
-	  *clkpin = 1;
-	  *clkpin = 0;
-	}
+    // Fast SPI bitbang swiped from LPD8806 library
+    for(uint8_t bit = 0x80; bit; bit >>= 1) {
+      if(c & bit) *dataport |=  datapinmask;
+      else        *dataport &= ~datapinmask;
+      *clkport |=  clkpinmask;
+      *clkport &= ~clkpinmask;
+    }
   }
 }
 
 void Adafruit_ST7735::writecommand(uint8_t c)
 {
-  digitalWrite(_rs, LOW); // *rspin = 0
-  digitalWrite(_cs, LOW); // *cspin = 0;
+  *rsport &= ~rspinmask;
+  *csport &= ~cspinmask;
+  //Serial.print("C ");
   spiwrite(c);
-  digitalWrite(_cs, HIGH); // *cspin = 1;
+  *csport |= cspinmask;
 }
 
 void Adafruit_ST7735::writedata(uint8_t c)
 {
-  digitalWrite(_rs, HIGH); // *rspin = 1
-  digitalWrite(_cs, LOW); // *cspin = 0;
+  *rsport |=  rspinmask;
+  *csport &= ~cspinmask;
+  //Serial.print("D ");
   spiwrite(c);
-  digitalWrite(_cs, HIGH); // *cspin = 1;
+  *csport |= cspinmask;
 } 
 
 void Adafruit_ST7735::writedata16(uint16_t d)
 {
-  digitalWrite(_rs, HIGH); // *rspin = 1
-  digitalWrite(_cs, LOW); // *cspin = 0;
+  *rsport |=  rspinmask;
+  *csport &= ~cspinmask;
   //Serial.print("D ");
   spiwrite(d >> 8);
   spiwrite(d);
-  digitalWrite(_cs, HIGH); // *cspin = 1;
+  *csport |= cspinmask;
 } 
 
 void Adafruit_ST7735::setBitrate(uint32_t n)
@@ -634,13 +640,12 @@ void Adafruit_ST7735::commonInit(const uint8_t *cmdList)
     else
         hwSPI = false;
 
-  // Need to handle RS cnd CS pins regardless of hardware SPI          
   pinMode(_rs, OUTPUT);
   pinMode(_cs, OUTPUT);
-  cspin = portOutputRegister(digitalPinToPort(_cs));
-  rspin = portOutputRegister(digitalPinToPort(_rs));
-  digitalWrite(_cs, HIGH); // *cspin = 1;
-  digitalWrite(_rs, LOW); // *rspin = 0
+  csport    = portOutputRegister(digitalPinToPort(_cs));
+  rsport    = portOutputRegister(digitalPinToPort(_rs));
+  cspinmask = digitalPinToBitMask(_cs);
+  rspinmask = digitalPinToBitMask(_rs);
 
   if(hwSPI) { // Using hardware SPI
     if (_sclk == 14)
@@ -653,16 +658,17 @@ void Adafruit_ST7735::commonInit(const uint8_t *cmdList)
     SPI.setBitOrder(MSBFIRST);
     SPI.setDataMode(SPI_MODE0);
   } else {
-    hwSPI = false;
-    clkpin = portOutputRegister(digitalPinToPort(_sclk));
-    datapin = portOutputRegister(digitalPinToPort(_sid));
-    *clkpin = 0;
-    *datapin = 0;
-    pinMode(_cs, OUTPUT);
-    pinMode(_rs, OUTPUT);
     pinMode(_sclk, OUTPUT);
-    pinMode(_sid, OUTPUT);
-	}
+    pinMode(_sid , OUTPUT);
+    clkport     = portOutputRegister(digitalPinToPort(_sclk));
+    dataport    = portOutputRegister(digitalPinToPort(_sid));
+    clkpinmask  = digitalPinToBitMask(_sclk);
+    datapinmask = digitalPinToBitMask(_sid);
+    *clkport   &= ~clkpinmask;
+    *dataport  &= ~datapinmask;
+  }
+  // toggle RST low to reset; CS low so it'll listen to us
+  *csport &= ~cspinmask;
 
 #endif
 
