@@ -1,15 +1,10 @@
 /***************************************************
   This is a library for the Adafruit 1.8" SPI display.
-
-This library works with the Adafruit 1.8" TFT Breakout w/SD card
+  This library works with the Adafruit 1.8" TFT Breakout w/SD card
   ----> http://www.adafruit.com/products/358
-The 1.8" TFT shield
-  ----> https://www.adafruit.com/product/802
-The 1.44" TFT breakout
-  ----> https://www.adafruit.com/product/2088
-as well as Adafruit raw 1.8" TFT display
+  as well as Adafruit raw 1.8" TFT display
   ----> http://www.adafruit.com/products/618
-
+ 
   Check out the links above for our tutorials and wiring diagrams
   These displays use SPI to communicate, 4 or 5 pins are required to
   interface (RST is optional)
@@ -44,26 +39,13 @@ typedef unsigned char prog_uchar;
   #include <avr/pgmspace.h>
 #endif
 
-#if defined(__SAM3X8E__)
-    #undef __FlashStringHelper::F(string_literal)
-    #define F(string_literal) string_literal
-#endif
-
 // some flags for initR() :(
 #define INITR_GREENTAB 0x0
 #define INITR_REDTAB   0x1
 #define INITR_BLACKTAB   0x2
 
-#define INITR_18GREENTAB    INITR_GREENTAB
-#define INITR_18REDTAB      INITR_REDTAB
-#define INITR_18BLACKTAB    INITR_BLACKTAB
-#define INITR_144GREENTAB   0x1
-
 #define ST7735_TFTWIDTH  128
-// for 1.44" display
-#define ST7735_TFTHEIGHT_144 128
-// for 1.8" display
-#define ST7735_TFTHEIGHT_18  160
+#define ST7735_TFTHEIGHT 160
 
 #define ST7735_NOP     0x00
 #define ST7735_SWRESET 0x01
@@ -126,8 +108,9 @@ class Adafruit_ST7735 : public Adafruit_GFX {
 
  public:
 
-  Adafruit_ST7735(int8_t CS, int8_t RS, int8_t SID, int8_t SCLK, int8_t RST = -1);
-  Adafruit_ST7735(int8_t CS, int8_t RS, int8_t RST = -1);
+  Adafruit_ST7735(uint8_t CS, uint8_t RS, uint8_t SID, uint8_t SCLK,
+    uint8_t RST);
+  Adafruit_ST7735(uint8_t CS, uint8_t RS, uint8_t RST);
 
   void     initB(void),                             // for ST7735B displays
            initR(uint8_t options = INITR_GREENTAB), // for ST7735R
@@ -141,7 +124,12 @@ class Adafruit_ST7735 : public Adafruit_GFX {
              uint16_t color),
            setRotation(uint8_t r),
            invertDisplay(boolean i);
-  uint16_t Color565(uint8_t r, uint8_t g, uint8_t b);
+
+  // Pass 8-bit (each) R,G,B, get back 16-bit packed color
+  inline uint16_t Color565(uint8_t r, uint8_t g, uint8_t b) {
+           return ((b & 0xF8) << 8) | ((g & 0xFC) << 3) | (r >> 3);
+  }
+  void setBitrate(uint32_t n);
 
   /* These are not for current use, 8-bit protocol only!
   uint8_t  readdata(void),
@@ -154,16 +142,18 @@ class Adafruit_ST7735 : public Adafruit_GFX {
  private:
   uint8_t  tabcolor;
 
-  void     spiwrite(uint8_t),
+  void     writebegin(),
+           spiwrite(uint8_t),
            writecommand(uint8_t c),
            writedata(uint8_t d),
+           writedata16(uint16_t d),
            commandList(const uint8_t *addr),
            commonInit(const uint8_t *cmdList);
 //uint8_t  spiread(void);
 
   boolean  hwSPI;
 
-#if defined(__AVR__) || defined(CORE_TEENSY)
+#if defined(__AVR__) 
 volatile uint8_t *dataport, *clkport, *csport, *rsport;
   uint8_t  _cs, _rs, _rst, _sid, _sclk,
            datapinmask, clkpinmask, cspinmask, rspinmask,
@@ -177,6 +167,14 @@ volatile uint8_t *dataport, *clkport, *csport, *rsport;
             colstart, rowstart; // some displays need this changed
 #endif //  #if defined(__SAM3X8E__)
   
+#if defined(__MK20DX128__) || defined(__MK20DX256__) || defined(__MKL26Z64__)
+  uint8_t  _cs, _rs, _rst, _sid, _sclk;
+  uint8_t colstart, rowstart;
+  uint8_t pcs_data, pcs_command;
+  uint32_t ctar;
+  volatile uint8_t *datapin, *clkpin, *cspin, *rspin;
+#endif
+
 };
 
 #endif
