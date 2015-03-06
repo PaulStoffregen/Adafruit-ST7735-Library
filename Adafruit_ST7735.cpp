@@ -44,7 +44,7 @@ Adafruit_ST7735::Adafruit_ST7735(uint8_t cs, uint8_t rs, uint8_t rst) :
   _rs   = rs;
   _rst  = rst;
   hwSPI = true;
-  _sid  = _sclk = 0;
+  _sid  = _sclk = (uint8_t)-1;
 }
 
 
@@ -302,6 +302,8 @@ inline void Adafruit_ST7735::spiwrite(uint8_t c)
   //Serial.println(c, HEX);
   if (hwSPI) {
     SPI.transfer(c);
+  } else if (hwSPI1) {
+    SPI1.transfer(c);
   } else {
     // Fast SPI bitbang swiped from LPD8806 library
     for(uint8_t bit = 0x80; bit; bit >>= 1) {
@@ -583,8 +585,8 @@ void Adafruit_ST7735::commonInit(const uint8_t *cmdList)
 
 
 #elif defined(__MK20DX128__) || defined(__MK20DX256__) 
-	if (_sid == 0) _sid = 11;
-	if (_sclk == 0) _sclk = 13;
+	if (_sid == (uint8_t)-1) _sid = 11;
+	if (_sclk == (uint8_t)-1) _sclk = 13;
 	if ( spi_pin_is_cs(_cs) && spi_pin_is_cs(_rs)
 	 && (_sid == 7 || _sid == 11)
 	 && (_sclk == 13 || _sclk == 14)
@@ -632,14 +634,20 @@ void Adafruit_ST7735::commonInit(const uint8_t *cmdList)
 	}
     // Teensy LC
 #elif defined(__MKL26Z64__)
-	if (_sid == 0) _sid = 11;
-	if (_sclk == 0) _sclk = 13;
-	if ((_sid == 7 || _sid == 11)
+    hwSPI1 = false;
+	if (_sid == (uint8_t)-1) _sid = 11;
+	if (_sclk == (uint8_t)-1) _sclk = 13;
+	
+    // See if pins are on standard SPI0
+    if ((_sid == 7 || _sid == 11)
 	 && (_sclk == 13 || _sclk == 14))
 		hwSPI = true;
-    else
+    else {
         hwSPI = false;
-
+        if ((_sid == 0 || _sid == 21) && (_sclk == 20 ))
+            hwSPI1 = true;
+    }
+ 
   pinMode(_rs, OUTPUT);
   pinMode(_cs, OUTPUT);
   csport    = portOutputRegister(digitalPinToPort(_cs));
@@ -657,6 +665,14 @@ void Adafruit_ST7735::commonInit(const uint8_t *cmdList)
     //Due defaults to 4mHz (clock divider setting of 21)
     SPI.setBitOrder(MSBFIRST);
     SPI.setDataMode(SPI_MODE0);
+  } else if(hwSPI1) { // Using hardware SPI
+    SPI1.setSCK(_sclk);
+    SPI1.setMOSI(_sid);
+    SPI1.begin();
+    SPI1.setClockDivider(SPI_CLOCK_DIV4); // 4 MHz (half speed)
+    //Due defaults to 4mHz (clock divider setting of 21)
+    SPI1.setBitOrder(MSBFIRST);
+    SPI1.setDataMode(SPI_MODE0);
   } else {
     pinMode(_sclk, OUTPUT);
     pinMode(_sid , OUTPUT);
