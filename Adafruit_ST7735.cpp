@@ -44,14 +44,15 @@ Adafruit_ST7735::Adafruit_ST7735(uint8_t cs, uint8_t rs, uint8_t rst) :
   _rs   = rs;
   _rst  = rst;
   hwSPI = true;
-  _sid  = _sclk = 0;
+  _sid  = _sclk = (uint8_t)-1;
 }
 
 
 /***************************************************************/
 /*     Arduino Uno, Leonardo, Mega, Teensy 2.0, etc            */
+/*                                   Teeny LC                  */
 /***************************************************************/
-#ifdef __AVR__
+#if defined(__AVR__ )
 inline void Adafruit_ST7735::writebegin()
 {
 }
@@ -180,7 +181,7 @@ void Adafruit_ST7735::setBitrate(uint32_t n)
 /***************************************************************/
 /*     Teensy 3.0 & 3.1                                        */
 /***************************************************************/
-#elif defined(__MK20DX128__) || defined(__MK20DX256__)
+#elif defined(__MK20DX128__) || defined(__MK20DX256__) 
 
 inline void Adafruit_ST7735::writebegin()
 {
@@ -198,8 +199,8 @@ inline void Adafruit_ST7735::spiwrite(uint8_t c)
 void Adafruit_ST7735::writecommand(uint8_t c)
 {
 	if (hwSPI) {
-		SPI0.PUSHR = c | (pcs_command << 16) | SPI_PUSHR_CTAS(0);
-		while (((SPI0.SR) & (15 << 12)) > (3 << 12)) ; // wait if FIFO full
+		KINETISK_SPI0.PUSHR = c | (pcs_command << 16) | SPI_PUSHR_CTAS(0);
+		while (((KINETISK_SPI0.SR) & (15 << 12)) > (3 << 12)) ; // wait if FIFO full
 	} else {
 		*rspin = 0;
 		*cspin = 0;
@@ -211,8 +212,8 @@ void Adafruit_ST7735::writecommand(uint8_t c)
 void Adafruit_ST7735::writedata(uint8_t c)
 {
 	if (hwSPI) {
-		SPI0.PUSHR = c | (pcs_data << 16) | SPI_PUSHR_CTAS(0);
-		while (((SPI0.SR) & (15 << 12)) > (3 << 12)) ; // wait if FIFO full
+		KINETISK_SPI0.PUSHR = c | (pcs_data << 16) | SPI_PUSHR_CTAS(0);
+		while (((KINETISK_SPI0.SR) & (15 << 12)) > (3 << 12)) ; // wait if FIFO full
 	} else {
 		*rspin = 1;
 		*cspin = 0;
@@ -224,8 +225,8 @@ void Adafruit_ST7735::writedata(uint8_t c)
 void Adafruit_ST7735::writedata16(uint16_t d)
 {
 	if (hwSPI) {
-		SPI0.PUSHR = d | (pcs_data << 16) | SPI_PUSHR_CTAS(1);
-		while (((SPI0.SR) & (15 << 12)) > (3 << 12)) ; // wait if FIFO full
+		KINETISK_SPI0.PUSHR = d | (pcs_data << 16) | SPI_PUSHR_CTAS(1);
+		while (((KINETISK_SPI0.SR) & (15 << 12)) > (3 << 12)) ; // wait if FIFO full
 	} else {
 		*rspin = 1;
 		*cspin = 0;
@@ -282,12 +283,78 @@ void Adafruit_ST7735::setBitrate(uint32_t n)
 		ctar = CTAR_4MHz;
 	}
 	SIM_SCGC6 |= SIM_SCGC6_SPI0;
-	SPI0.MCR = SPI_MCR_MDIS | SPI_MCR_HALT;
-	SPI0.CTAR0 = ctar | SPI_CTAR_FMSZ(7);
-	SPI0.CTAR1 = ctar | SPI_CTAR_FMSZ(15);
-	SPI0.MCR = SPI_MCR_MSTR | SPI_MCR_PCSIS(0x1F) | SPI_MCR_CLR_TXF | SPI_MCR_CLR_RXF;
+	KINETISK_SPI0.MCR = SPI_MCR_MDIS | SPI_MCR_HALT;
+	KINETISK_SPI0.CTAR0 = ctar | SPI_CTAR_FMSZ(7);
+	KINETISK_SPI0.CTAR1 = ctar | SPI_CTAR_FMSZ(15);
+	KINETISK_SPI0.MCR = SPI_MCR_MSTR | SPI_MCR_PCSIS(0x1F) | SPI_MCR_CLR_TXF | SPI_MCR_CLR_RXF;
 }
 
+/***************************************************************/
+/*     Teensy LC                                               */
+/***************************************************************/
+#elif defined(__MKL26Z64__)
+inline void Adafruit_ST7735::writebegin()
+{
+}
+
+inline void Adafruit_ST7735::spiwrite(uint8_t c)
+{
+  //Serial.println(c, HEX);
+  if (hwSPI) {
+    SPI.transfer(c);
+  } else if (hwSPI1) {
+    SPI1.transfer(c);
+  } else {
+    // Fast SPI bitbang swiped from LPD8806 library
+    for(uint8_t bit = 0x80; bit; bit >>= 1) {
+      if(c & bit) *dataport |=  datapinmask;
+      else        *dataport &= ~datapinmask;
+      *clkport |=  clkpinmask;
+      *clkport &= ~clkpinmask;
+    }
+  }
+}
+
+void Adafruit_ST7735::writecommand(uint8_t c)
+{
+  *rsport &= ~rspinmask;
+  *csport &= ~cspinmask;
+  //Serial.print("C ");
+  spiwrite(c);
+  *csport |= cspinmask;
+}
+
+void Adafruit_ST7735::writedata(uint8_t c)
+{
+  *rsport |=  rspinmask;
+  *csport &= ~cspinmask;
+  //Serial.print("D ");
+  spiwrite(c);
+  *csport |= cspinmask;
+} 
+
+void Adafruit_ST7735::writedata16(uint16_t d)
+{
+  *rsport |=  rspinmask;
+  *csport &= ~cspinmask;
+  //Serial.print("D ");
+  spiwrite(d >> 8);
+  spiwrite(d);
+  *csport |= cspinmask;
+} 
+
+void Adafruit_ST7735::setBitrate(uint32_t n)
+{
+  if (n >= 8000000) {
+    SPI.setClockDivider(SPI_CLOCK_DIV2);
+  } else if (n >= 4000000) {
+    SPI.setClockDivider(SPI_CLOCK_DIV4);
+  } else if (n >= 2000000) {
+    SPI.setClockDivider(SPI_CLOCK_DIV8);
+  } else {
+    SPI.setClockDivider(SPI_CLOCK_DIV16);
+  }
+}
 #endif //#if defined(__SAM3X8E__)
 
 
@@ -517,9 +584,9 @@ void Adafruit_ST7735::commonInit(const uint8_t *cmdList)
   csport ->PIO_CODR  |=  cspinmask; // Set control bits to LOW (idle)
 
 
-#elif defined(__MK20DX128__) || defined(__MK20DX256__)
-	if (_sid == 0) _sid = 11;
-	if (_sclk == 0) _sclk = 13;
+#elif defined(__MK20DX128__) || defined(__MK20DX256__) 
+	if (_sid == (uint8_t)-1) _sid = 11;
+	if (_sclk == (uint8_t)-1) _sclk = 13;
 	if ( spi_pin_is_cs(_cs) && spi_pin_is_cs(_rs)
 	 && (_sid == 7 || _sid == 11)
 	 && (_sclk == 13 || _sclk == 14)
@@ -546,10 +613,10 @@ void Adafruit_ST7735::commonInit(const uint8_t *cmdList)
 		pcs_data = spi_configure_cs_pin(_cs);
 		pcs_command = pcs_data | spi_configure_cs_pin(_rs);
 		SIM_SCGC6 |= SIM_SCGC6_SPI0;
-		SPI0.MCR = SPI_MCR_MDIS | SPI_MCR_HALT;
-		SPI0.CTAR0 = ctar | SPI_CTAR_FMSZ(7);
-		SPI0.CTAR1 = ctar | SPI_CTAR_FMSZ(15);
-		SPI0.MCR = SPI_MCR_MSTR | SPI_MCR_PCSIS(0x1F) | SPI_MCR_CLR_TXF | SPI_MCR_CLR_RXF;
+		KINETISK_SPI0.MCR = SPI_MCR_MDIS | SPI_MCR_HALT;
+		KINETISK_SPI0.CTAR0 = ctar | SPI_CTAR_FMSZ(7);
+		KINETISK_SPI0.CTAR1 = ctar | SPI_CTAR_FMSZ(15);
+		KINETISK_SPI0.MCR = SPI_MCR_MSTR | SPI_MCR_PCSIS(0x1F) | SPI_MCR_CLR_TXF | SPI_MCR_CLR_RXF;
 	} else {
 		hwSPI = false;
 		cspin = portOutputRegister(digitalPinToPort(_cs));
@@ -565,6 +632,59 @@ void Adafruit_ST7735::commonInit(const uint8_t *cmdList)
 		pinMode(_sclk, OUTPUT);
 		pinMode(_sid, OUTPUT);
 	}
+    // Teensy LC
+#elif defined(__MKL26Z64__)
+    hwSPI1 = false;
+	if (_sid == (uint8_t)-1) _sid = 11;
+	if (_sclk == (uint8_t)-1) _sclk = 13;
+	
+    // See if pins are on standard SPI0
+    if ((_sid == 7 || _sid == 11)
+	 && (_sclk == 13 || _sclk == 14))
+		hwSPI = true;
+    else {
+        hwSPI = false;
+        if ((_sid == 0 || _sid == 21) && (_sclk == 20 ))
+            hwSPI1 = true;
+    }
+ 
+  pinMode(_rs, OUTPUT);
+  pinMode(_cs, OUTPUT);
+  csport    = portOutputRegister(digitalPinToPort(_cs));
+  rsport    = portOutputRegister(digitalPinToPort(_rs));
+  cspinmask = digitalPinToBitMask(_cs);
+  rspinmask = digitalPinToBitMask(_rs);
+
+  if(hwSPI) { // Using hardware SPI
+    if (_sclk == 14)
+        SPI.setSCK(14);
+    if (_sid == 7)
+        SPI.setMOSI(7);
+    SPI.begin();
+    SPI.setClockDivider(SPI_CLOCK_DIV4); // 4 MHz (half speed)
+    //Due defaults to 4mHz (clock divider setting of 21)
+    SPI.setBitOrder(MSBFIRST);
+    SPI.setDataMode(SPI_MODE0);
+  } else if(hwSPI1) { // Using hardware SPI
+    SPI1.setSCK(_sclk);
+    SPI1.setMOSI(_sid);
+    SPI1.begin();
+    SPI1.setClockDivider(SPI_CLOCK_DIV4); // 4 MHz (half speed)
+    //Due defaults to 4mHz (clock divider setting of 21)
+    SPI1.setBitOrder(MSBFIRST);
+    SPI1.setDataMode(SPI_MODE0);
+  } else {
+    pinMode(_sclk, OUTPUT);
+    pinMode(_sid , OUTPUT);
+    clkport     = portOutputRegister(digitalPinToPort(_sclk));
+    dataport    = portOutputRegister(digitalPinToPort(_sid));
+    clkpinmask  = digitalPinToBitMask(_sclk);
+    datapinmask = digitalPinToBitMask(_sid);
+    *clkport   &= ~clkpinmask;
+    *dataport  &= ~datapinmask;
+  }
+  // toggle RST low to reset; CS low so it'll listen to us
+  *csport &= ~cspinmask;
 
 #endif
 
