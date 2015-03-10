@@ -175,6 +175,14 @@ volatile uint8_t *dataport, *clkport, *csport, *rsport;
   volatile uint8_t *datapin, *clkpin, *cspin, *rspin;
 #endif
 
+#if defined(__MKL26Z64__)
+volatile uint8_t *dataport, *clkport, *csport, *rsport;
+  uint8_t  _cs, _rs, _rst, _sid, _sclk,
+           datapinmask, clkpinmask, cspinmask, rspinmask,
+           colstart, rowstart; // some displays need this changed
+  boolean  hwSPI1;
+#endif //  #ifdef __AVR__
+
 };
 
 #endif
