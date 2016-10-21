@@ -167,7 +167,7 @@ volatile uint8_t *dataport, *clkport, *csport, *rsport;
             colstart, rowstart; // some displays need this changed
 #endif //  #if defined(__SAM3X8E__)
   
-#if defined(__MK20DX128__) || defined(__MK20DX256__)
+#if defined(__MK20DX128__) || defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__)
   uint8_t  _cs, _rs, _rst, _sid, _sclk;
   uint8_t colstart, rowstart;
   uint8_t pcs_data, pcs_command;
