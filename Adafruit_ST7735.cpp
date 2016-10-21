@@ -572,7 +572,7 @@ void Adafruit_ST7735::commonInit(const uint8_t *cmdList)
 	csport ->PIO_CODR  |=  cspinmask; // Set control bits to LOW (idle)
 
 
-#elif defined(__MK20DX128__) || defined(__MK20DX256__) 
+#elif defined(__MK20DX128__) || defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__)
 	if (_sid == (uint8_t)-1) _sid = 11;
 	if (_sclk == (uint8_t)-1) _sclk = 13;
 	if ( spi_pin_is_cs(_cs) && spi_pin_is_cs(_rs)
